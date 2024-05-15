@@ -14,7 +14,9 @@ MYSQL_DATABASE = 'new'
 @celery_app.task(name='fetch_store_data_task')
 def fetch_store_data_task(country: str = 'in'):
     try:
+        logging.info("Data fetched started")
         response = requests.get('https://newsapi.org/v2/top-headlines', params={'country': country, 'apiKey': API_KEY})
+        response.raise_for_status()  # Raise an exception for HTTP errors
         data = response.json()
         store_data_in_mysql(data)
         logging.info("Data fetched and stored successfully")
@@ -34,7 +36,6 @@ def store_data_in_mysql(data):
             title = article['title']
             description = article['description']
             url = article['url']
-            url_to_image = article['urlToImage']
             published_at_iso = article['publishedAt']
             published_at = datetime.strptime(published_at_iso, '%Y-%m-%dT%H:%M:%SZ')
             published_at = pytz.utc.localize(published_at).astimezone(pytz.timezone('UTC'))
@@ -42,9 +43,9 @@ def store_data_in_mysql(data):
 
             if not is_duplicate(cursor, title):
                 cursor.execute("""
-                    INSERT INTO news_headline (source_name, author, title, description, url, url_to_image, published_at, content)
+                    INSERT INTO news_headline (source_name, author, title, description, url, published_at, content)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (source_name, author, title, description, url, url_to_image, published_at, content))
+                """, (source_name, author, title, description, url, published_at, content))
                 logging.info(f"Data stored successfully for: {title}")
             else:
                 logging.info(f"Skipping duplicate article: {title}")
@@ -61,3 +62,5 @@ def is_duplicate(cursor, title):
     cursor.execute("SELECT COUNT(*) FROM news_headline WHERE title = %s", (title,))
     result = cursor.fetchone()
     return result[0] > 0
+
+
